@@ -30,35 +30,46 @@ jobs:
         key: ${{ secrets.AWS_KEY }}
         command_timeout: 30m   # <--- 30분 대기
         script: |
-          set -e  # 에러 발생 시 즉시 종료
-          
           # ===== 1. 기존 Dev 봇 프로세스 종료 =====
           echo "🛑 기존 Dev 봇 프로세스 종료 중..."
           pkill -f "trading_bot_dev.py" || true
           sleep 2  # 프로세스 종료 대기
+          echo "✅ 프로세스 종료 완료"
           
           # ===== 2. 폴더 이동 =====
-          cd /home/ubuntu/trading_bot_dev || exit 1
-          echo "📂 작업 디렉토리: $(pwd)"
+          echo "📂 작업 디렉토리 이동 중..."
+          cd /home/ubuntu/trading_bot_dev
+          echo "📂 현재 디렉토리: $(pwd)"
+          ls -la
           
           # ===== 3. 로그 백업 =====
           mkdir -p logs
           NOW=$(date +%Y%m%d_%H%M)
           if [ -f output.log ]; then
-            mv output.log "logs/output_$NOW.log"
-            echo "📝 이전 로그 백업: logs/output_$NOW.log"
+          mv output.log "logs/output_$NOW.log"
+          echo "📝 이전 로그 백업: logs/output_$NOW.log"
+          else
+          echo "📝 기존 로그 없음"
           fi
           
           # ===== 4. trading_bot.py 파일명 변경 (Prod와 구분) =====
           if [ -f trading_bot.py ]; then
-            mv trading_bot.py trading_bot_dev.py
-            echo "✏️ 파일명 변경: trading_bot.py → trading_bot_dev.py"
-          elif [ ! -f trading_bot_dev.py ]; then
-            # 원본도 없고, 변경된 파일도 없으면? -> 뭔가 잘못됨
-            echo "❌ 배포할 파일이 없습니다!"
-            exit 1
+          mv trading_bot.py trading_bot_dev.py
+          echo "✏️ 파일명 변경: trading_bot.py → trading_bot_dev.py"
+          else
+          echo "⚠️ trading_bot.py 파일이 없습니다!"
+          ls -la *.py 2>/dev/null || echo "Python 파일 없음"
+          exit 1
           fi
-
+          
+          # ===== 5. config.py 확인 =====
+          if [ ! -f config.py ]; then
+          echo "❌ config.py가 없습니다! 배포 실패"
+          exit 1
+          else
+          echo "✅ 기존 config.py 사용"
+          fi
+          
           # ===== 6. 패키지 설치 =====
           echo "📦 패키지 설치 중..."
           ~/venv/bin/pip install -r requirements.txt --no-cache-dir --quiet
@@ -70,12 +81,12 @@ jobs:
           
           # ===== 8. 프로세스 정상 시작 확인 =====
           sleep 3
-            if ps aux | grep -v grep | grep "trading_bot_dev.py" > /dev/null; then
-            echo "✅ Dev 봇 정상 실행 (PID: $BOT_PID)"
+          if ps aux | grep -v grep | grep "trading_bot_dev.py" > /dev/null; then
+          echo "✅ Dev 봇 정상 실행"
           else
-            echo "❌ Dev 봇 실행 실패!"
-            cat output.log
-            exit 1
+          echo "❌ Dev 봇 실행 실패!"
+          cat output.log
+          exit 1
           fi
           
           echo "=========================================="
@@ -83,7 +94,7 @@ jobs:
           echo "=========================================="
           exit 0
 
-    - name: 5. 배포 성공 알림
+    - name: 4. 배포 성공 알림
       if: success()
       run: |
         echo "✅ Dev Bot 배포 성공"
