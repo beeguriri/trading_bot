@@ -30,9 +30,11 @@ jobs:
         key: ${{ secrets.AWS_KEY }}
         command_timeout: 30m   # <--- 30분 대기
         script: |
+          set -e
+
           # ===== 1. 기존 Dev 봇 프로세스 종료 =====
           echo "🛑 기존 Dev 봇 프로세스 종료 중..."
-          pkill -f "trading_bot_dev.py" || true
+          pkill -f "trading_bot_dev.py" || echo "프로세스 없음"
           sleep 2  # 프로세스 종료 대기
           echo "✅ 프로세스 종료 완료"
           
