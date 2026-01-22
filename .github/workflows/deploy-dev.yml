@@ -28,6 +28,7 @@ jobs:
         host: ${{ secrets.AWS_HOST }}
         username: ${{ secrets.AWS_USERNAME }}
         key: ${{ secrets.AWS_KEY }}
+        command_timeout: 30m   # <--- 30분 대기
         script: |
           # 1. 기존 Dev 봇 죽이기
           pkill -f trading_bot_dev.py || true
@@ -51,7 +52,7 @@ jobs:
 
           # 7. 가상환경 활성화 및 패키지 설치
           source ~/venv/bin/activate
-          pip install -r requirements.txt
+          pip install -r requirements.txt --no-cache-dir
 
           # 8. 봇 실행 (로그 남기기)
           nohup python3 -u trading_bot_dev.py > output.log 2>&1 &
