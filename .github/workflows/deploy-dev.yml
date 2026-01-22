@@ -22,38 +22,38 @@ jobs:
         target: "/home/ubuntu/trading_bot_dev" # ★ Dev 폴더로 전송
         rm: false
 
-    - name: 3. 서버에서 Dev 봇 재시작
+    - name: 3. 서버에서 Dev 봇 재시작 및 로그 백업
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.AWS_HOST }}
         username: ${{ secrets.AWS_USERNAME }}
         key: ${{ secrets.AWS_KEY }}
         script: |
-        # ---------------------------
-          # 1. 기존 봇 죽이기
+          # 1. 기존 Dev 봇 죽이기
           pkill -f trading_bot_dev.py || true
-          
+
           # 2. 폴더 이동
           cd /home/ubuntu/trading_bot_dev
-          
-          # 3. 로그 백업 (logs 폴더가 없으면 만듦)
-          mkdir -p logs
-          
-          # 현재 시간이 들어간 파일명 생성 (예: 20260122_1530.log)
-          TIMESTAMP=$(date +%Y%m%d_%H%M)
-          
-          # 기존 output.log가 있다면 logs 폴더로 옮김
-          if [ -f output.log ]; then
-            mv output.log logs/output_$TIMESTAMP.log
-          fi
-        # ---------------------------
 
-          # 3. 파일 이름 변경 및 준비
+          # 3. 로그 폴더 생성
+          mkdir -p logs
+
+          # 4. 날짜 변수 생성 (YAML 에러 방지를 위해 포맷 단순화)
+          NOW=$(date +%Y%m%d_%H%M)
+
+          # 5. 로그 백업 (파일이 있을 때만 이동)
+          if [ -f output.log ]; then
+            mv output.log logs/output_$NOW.log
+          fi
+
+          # 6. 파일 이름 변경 (Prod와 구분)
           mv trading_bot.py trading_bot_dev.py
+
+          # 7. 가상환경 활성화 및 패키지 설치
           source ~/venv/bin/activate
           pip install -r requirements.txt
-          
-          # 4. 봇 실행 (새로운 output.log에 기록됨)
+
+          # 8. 봇 실행 (로그 남기기)
           nohup python3 -u trading_bot_dev.py > output.log 2>&1 &
           
-          echo "🚀 백업 완료 & 재시작!"
+          echo "🚀 배포 완료: output.log에 기록 시작됨"
