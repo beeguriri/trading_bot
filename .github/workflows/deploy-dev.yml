@@ -34,10 +34,8 @@ jobs:
           
           # ===== 1. 기존 Dev 봇 프로세스 종료 =====
           echo "🛑 기존 Dev 봇 프로세스 종료 중..."
-          if pgrep -f "trading_bot_dev.py" > /dev/null; then
-            pkill -f "trading_bot_dev.py" || true
-            sleep 2  # 프로세스 종료 대기
-          fi
+          pkill -f "trading_bot_dev.py" || true
+          sleep 2  # 프로세스 종료 대기
           
           # ===== 2. 폴더 이동 =====
           cd /home/ubuntu/trading_bot_dev || exit 1
@@ -72,7 +70,7 @@ jobs:
           
           # ===== 8. 프로세스 정상 시작 확인 =====
           sleep 3
-          if pgrep -f "trading_bot_dev.py" > /dev/null; then
+            if ps aux | grep -v grep | grep "trading_bot_dev.py" > /dev/null; then
             echo "✅ Dev 봇 정상 실행 (PID: $BOT_PID)"
           else
             echo "❌ Dev 봇 실행 실패!"
