@@ -30,31 +30,64 @@ jobs:
         key: ${{ secrets.AWS_KEY }}
         command_timeout: 30m   # <--- 30분 대기
         script: |
-          # 1. 기존 Dev 봇 죽이기
-          pkill -f trading_bot_dev.py || true
-
-          # 2. 폴더 이동
-          cd /home/ubuntu/trading_bot_dev
-
-          # 3. 로그 폴더 생성
+          set -e  # 에러 발생 시 즉시 종료
+          
+          # ===== 1. 기존 Dev 봇 프로세스 종료 =====
+          echo "🛑 기존 Dev 봇 프로세스 종료 중..."
+          if pgrep -f "trading_bot_dev.py" > /dev/null; then
+            pkill -f "trading_bot_dev.py" || true
+            sleep 2  # 프로세스 종료 대기
+          fi
+          
+          # ===== 2. 폴더 이동 =====
+          cd /home/ubuntu/trading_bot_dev || exit 1
+          echo "📂 작업 디렉토리: $(pwd)"
+          
+          # ===== 3. 로그 백업 =====
           mkdir -p logs
-
-          # 4. 날짜 변수 생성 (YAML 에러 방지를 위해 포맷 단순화)
           NOW=$(date +%Y%m%d_%H%M)
-
-          # 5. 로그 백업 (파일이 있을 때만 이동)
           if [ -f output.log ]; then
-            mv output.log logs/output_$NOW.log
+            mv output.log "logs/output_$NOW.log"
+            echo "📝 이전 로그 백업: logs/output_$NOW.log"
+          fi
+          
+          # ===== 4. trading_bot.py 파일명 변경 (Prod와 구분) =====
+          if [ -f trading_bot.py ]; then
+            mv trading_bot.py trading_bot_dev.py
+            echo "✏️ 파일명 변경: trading_bot.py → trading_bot_dev.py"
+          elif [ ! -f trading_bot_dev.py ]; then
+            # 원본도 없고, 변경된 파일도 없으면? -> 뭔가 잘못됨
+            echo "❌ 배포할 파일이 없습니다!"
+            exit 1
           fi
 
-          # 6. 파일 이름 변경 (Prod와 구분)
-          mv trading_bot.py trading_bot_dev.py
-
-          # 7. 가상환경 활성화 및 패키지 설치
-          source ~/venv/bin/activate
-          pip install -r requirements.txt
-
-          # 8. 봇 실행 (로그 남기기)
-          nohup python3 -u trading_bot_dev.py > output.log 2>&1 &
+          # ===== 6. 패키지 설치 =====
+          echo "📦 패키지 설치 중..."
+          ~/venv/bin/pip install -r requirements.txt --no-cache-dir --quiet
           
-          echo "🚀 배포 완료: output.log에 기록 시작됨"
+          # ===== 7. Dev 봇 실행 =====
+          echo "🚀 Dev 봇 실행 중..."
+          nohup ~/venv/bin/python3 -u trading_bot_dev.py > output.log 2>&1 < /dev/null &
+          BOT_PID=$!
+          
+          # ===== 8. 프로세스 정상 시작 확인 =====
+          sleep 3
+          if pgrep -f "trading_bot_dev.py" > /dev/null; then
+            echo "✅ Dev 봇 정상 실행 (PID: $BOT_PID)"
+          else
+            echo "❌ Dev 봇 실행 실패!"
+            cat output.log
+            exit 1
+          fi
+          
+          echo "=========================================="
+          echo "✅ 배포 완료!"
+          echo "=========================================="
+          exit 0
+
+    - name: 5. 배포 성공 알림
+      if: success()
+      run: |
+        echo "✅ Dev Bot 배포 성공"
+        echo "Branch: develop"
+        echo "Time: $(date)"
