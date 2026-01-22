@@ -1,0 +1,59 @@
+name: Deploy Dev Bot
+
+on:
+  push:
+    branches: [ "develop" ]  # ★ develop 브랜치일 때만 실행
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 1. 코드 가져오기
+      uses: actions/checkout@v3
+
+    - name: 2. 서버로 파일 전송 (config.py 제외하고 덮어쓰기)
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.AWS_HOST }}
+        username: ${{ secrets.AWS_USERNAME }}
+        key: ${{ secrets.AWS_KEY }}
+        source: "."
+        target: "/home/ubuntu/trading_bot_dev" # ★ Dev 폴더로 전송
+        rm: false
+
+    - name: 3. 서버에서 Dev 봇 재시작
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.AWS_HOST }}
+        username: ${{ secrets.AWS_USERNAME }}
+        key: ${{ secrets.AWS_KEY }}
+        script: |
+        # ---------------------------
+          # 1. 기존 봇 죽이기
+          pkill -f trading_bot_dev.py || true
+          
+          # 2. 폴더 이동
+          cd /home/ubuntu/trading_bot_dev
+          
+          # 3. 로그 백업 (logs 폴더가 없으면 만듦)
+          mkdir -p logs
+          
+          # 현재 시간이 들어간 파일명 생성 (예: 20260122_1530.log)
+          TIMESTAMP=$(date +%Y%m%d_%H%M)
+          
+          # 기존 output.log가 있다면 logs 폴더로 옮김
+          if [ -f output.log ]; then
+            mv output.log logs/output_$TIMESTAMP.log
+          fi
+        # ---------------------------
+
+          # 3. 파일 이름 변경 및 준비
+          mv trading_bot.py trading_bot_dev.py
+          source ~/venv/bin/activate
+          pip install -r requirements.txt
+          
+          # 4. 봇 실행 (새로운 output.log에 기록됨)
+          nohup python3 -u trading_bot_dev.py > output.log 2>&1 &
+          
+          echo "🚀 백업 완료 & 재시작!"
