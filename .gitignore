@@ -1,6 +1,7 @@
 ### custom ###
 /config.py
 .idea
+/firebase_key.json
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,flask
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,flask
