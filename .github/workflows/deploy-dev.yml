@@ -1,0 +1,121 @@
+name: Deploy Dev Bot
+
+on:
+  push:
+    branches: [ "develop" ]  # ★ develop 브랜치일 때만 실행
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 1. 코드 가져오기
+      uses: actions/checkout@v3
+
+    - name: 2. 서버로 파일 전송 (config.py 제외하고 덮어쓰기)
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.AWS_HOST }}
+        username: ${{ secrets.AWS_USERNAME }}
+        key: ${{ secrets.AWS_KEY }}
+        source: "."
+        target: "/home/ubuntu/trading_bot_dev" # ★ Dev 폴더로 전송
+        rm: false
+
+    - name: 3. 서버에서 Dev 봇 재시작 및 로그 백업
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.AWS_HOST }}
+        username: ${{ secrets.AWS_USERNAME }}
+        key: ${{ secrets.AWS_KEY }}
+        command_timeout: 30m   # <--- 30분 대기
+        script: |
+          # ===== 1. 기존 Dev 봇 프로세스 종료 =====
+          echo "🔎 실행 중인 봇(python3 + trading_bot_dev.py) 검색 중..."
+          # [핵심] ps로 전체를 보고 -> grep으로 찾고 -> bash는 뺀다!
+          TARGET_PID=$(ps -ef | grep "trading_bot_dev.py" | grep -v "grep" | grep -v "bash" | awk '{print $2}')
+          
+          echo "📸 [디버그] 발견된 PID: [$TARGET_PID]"
+          if [ -n "$TARGET_PID" ]; then
+            echo "🛑 프로세스($TARGET_PID)를 종료합니다."
+            
+            # 죽이기 전에 그게 진짜 봇인지 프로세스 정보 한번 더 출력
+            ps -fp $TARGET_PID || true
+            
+            # 종료 시도
+            kill $TARGET_PID || true
+            sleep 3
+            
+            # 잘 죽었는지 확인
+            if ps -ef | grep "trading_bot_dev.py" | grep -v "grep" | grep -v "bash" > /dev/null; then
+               echo "⚠️ 안 죽어서 강제 종료(kill -9) 시도..."
+               kill -9 $TARGET_PID || true
+            fi
+          else
+            echo "✅ 실행 중인 기존 봇이 없습니다. (종료 단계 건너뜀)"
+          fi
+          
+          # ===== 2. 폴더 이동 =====
+          echo "📂 작업 디렉토리 이동 중..."
+          cd /home/ubuntu/trading_bot_dev
+          echo "📂 현재 디렉토리: $(pwd)"
+          ls -la
+          
+          # ===== 3. 로그 백업 =====
+          mkdir -p logs
+          NOW=$(date +%Y%m%d_%H%M)
+          if [ -f output.log ]; then
+          mv output.log "logs/output_$NOW.log"
+          echo "📝 이전 로그 백업: logs/output_$NOW.log"
+          else
+          echo "📝 기존 로그 없음"
+          fi
+          
+          # ===== 4. trading_bot.py 파일명 변경 (Prod와 구분) =====
+          if [ -f trading_bot.py ]; then
+          mv trading_bot.py trading_bot_dev.py
+          echo "✏️ 파일명 변경: trading_bot.py → trading_bot_dev.py"
+          else
+          echo "⚠️ trading_bot.py 파일이 없습니다!"
+          ls -la *.py 2>/dev/null || echo "Python 파일 없음"
+          exit 1
+          fi
+          
+          # ===== 5. config.py 확인 =====
+          if [ ! -f config.py ]; then
+          echo "❌ config.py가 없습니다! 배포 실패"
+          exit 1
+          else
+          echo "✅ 기존 config.py 사용"
+          fi
+          
+          # ===== 6. 패키지 설치 =====
+          echo "📦 패키지 설치 중..."
+          ~/venv/bin/pip install -r requirements.txt --no-cache-dir --quiet
+          
+          # ===== 7. Dev 봇 실행 =====
+          echo "🚀 Dev 봇 실행 중..."
+          nohup ~/venv/bin/python3 -u trading_bot_dev.py > output.log 2>&1 < /dev/null &
+          BOT_PID=$!
+          
+          # ===== 8. 프로세스 정상 시작 확인 =====
+          sleep 3
+          if ps aux | grep -v grep | grep "trading_bot_dev.py" > /dev/null; then
+          echo "✅ Dev 봇 정상 실행"
+          else
+          echo "❌ Dev 봇 실행 실패!"
+          cat output.log
+          exit 1
+          fi
+          
+          echo "=========================================="
+          echo "✅ 배포 완료!"
+          echo "=========================================="
+          exit 0
+
+    - name: 4. 배포 성공 알림
+      if: success()
+      run: |
+        echo "✅ Dev Bot 배포 성공"
+        echo "Branch: develop"
+        echo "Time: $(date)"
