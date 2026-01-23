@@ -30,13 +30,28 @@ jobs:
         key: ${{ secrets.AWS_KEY }}
         command_timeout: 30m   # <--- 30분 대기
         script: |
-          set -e
-
           # ===== 1. 기존 Dev 봇 프로세스 종료 =====
-          echo "🛑 기존 Dev 봇 프로세스 종료 중..."
-          pkill -f "trading_bot_dev.py" || echo "프로세스 없음"
-          sleep 2  # 프로세스 종료 대기
-          echo "✅ 프로세스 종료 완료"
+          echo "🔎 실행 중인 봇(python3 + trading_bot_dev.py) 검색 중..."
+          TARGET_PID=$(pgrep -f "python3.*trading_bot_dev.py" || true)
+          echo "📸 [디버그] 발견된 PID: [$TARGET_PID]"
+          if [ -n "$TARGET_PID" ]; then
+            echo "🛑 프로세스($TARGET_PID)를 종료합니다."
+            
+            # 죽이기 전에 그게 진짜 봇인지 프로세스 정보 한번 더 출력
+            ps -fp $TARGET_PID || true
+            
+            # 종료 시도
+            kill $TARGET_PID || true
+            sleep 3
+            
+            # 잘 죽었는지 확인
+            if pgrep -f "python3.*trading_bot_dev.py" > /dev/null; then
+               echo "⚠️ 안 죽어서 강제 종료(kill -9) 시도..."
+               kill -9 $TARGET_PID || true
+            fi
+          else
+            echo "✅ 실행 중인 기존 봇이 없습니다. (종료 단계 건너뜀)"
+          fi
           
           # ===== 2. 폴더 이동 =====
           echo "📂 작업 디렉토리 이동 중..."
