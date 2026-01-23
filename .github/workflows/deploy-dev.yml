@@ -32,7 +32,9 @@ jobs:
         script: |
           # ===== 1. 기존 Dev 봇 프로세스 종료 =====
           echo "🔎 실행 중인 봇(python3 + trading_bot_dev.py) 검색 중..."
-          TARGET_PID=$(pgrep -f "python3.*trading_bot_dev.py" || true)
+          # [핵심] ps로 전체를 보고 -> grep으로 찾고 -> bash는 뺀다!
+          TARGET_PID=$(ps -ef | grep "trading_bot_dev.py" | grep -v "grep" | grep -v "bash" | awk '{print $2}')
+          
           echo "📸 [디버그] 발견된 PID: [$TARGET_PID]"
           if [ -n "$TARGET_PID" ]; then
             echo "🛑 프로세스($TARGET_PID)를 종료합니다."
@@ -45,7 +47,7 @@ jobs:
             sleep 3
             
             # 잘 죽었는지 확인
-            if pgrep -f "python3.*trading_bot_dev.py" > /dev/null; then
+            if ps -ef | grep "trading_bot_dev.py" | grep -v "grep" | grep -v "bash" > /dev/null; then
                echo "⚠️ 안 죽어서 강제 종료(kill -9) 시도..."
                kill -9 $TARGET_PID || true
             fi
